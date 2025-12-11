@@ -120,68 +120,69 @@ export default [
 ];
 
 
-
-
-
-
-
-
----------
-// eslint.config.cjs
-// Minimal example for an Angular 20 workspace using ESLint v9 + @angular-eslint
-// Tweak rules/plugins as your team requires.
-
-const { defineConfig } = require("eslint/config"); // optional helper
-const js = require("@eslint/js");
-const typescriptParser = require("@typescript-eslint/parser");
-const typescriptPlugin = require("@typescript-eslint/eslint-plugin");
-const angularPlugin = require("@angular-eslint/eslint-plugin");
-const templatePlugin = require("@angular-eslint/eslint-plugin-template");
-const templateParser = require("@angular-eslint/template-parser");
-
-module.exports = [
-  // Basic JS recommended set (optional)
-  js.configs.recommended,
-
-  // TypeScript / Angular TS files (.ts)
-  {
-    files: ["**/*.ts"],
-    languageOptions: {
-      parser: typescriptParser,
-      parserOptions: {
-        project: "./tsconfig.json", // for typed rules if you want typed linting
-        ecmaVersion: 2024,
-        sourceType: "module",
+---------------
+{
+  "root": true,
+  "ignorePatterns": [
+    "dist/",
+    "node_modules/",
+    "coverage/",
+    "tmp/",
+    ".angular/"
+  ],
+  "overrides": [
+    {
+      "files": ["**/*.ts"],
+      "parser": "@typescript-eslint/parser",
+      "parserOptions": {
+        "project": ["tsconfig.json"],
+        "tsconfigRootDir": ".",
+        "sourceType": "module"
       },
-    },
-    plugins: {
-      "@typescript-eslint": typescriptPlugin,
-      "@angular-eslint": angularPlugin,
-    },
-    rules: {
-      // Example rule overrides:
-      "no-console": ["warn", { allow: ["warn", "error"] }],
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
-      // Angular-specific rules:
-      "@angular-eslint/component-class-suffix": ["error", { suffixes: ["Component"] }],
-      // Add or tweak rules for your codebase...
-    },
-    ignores: ["dist/**", "node_modules/**"],
-  },
+      "plugins": [
+        "@angular-eslint",
+        "@typescript-eslint",
+        "prettier"
+      ],
+      "extends": [
+        "eslint:recommended",
+        "plugin:@typescript-eslint/recommended",
+        "plugin:@typescript-eslint/recommended-requiring-type-checking",
+        "plugin:@angular-eslint/recommended",
+        "prettier"
+      ],
+      "rules": {
+        "@typescript-eslint/no-unused-vars": [
+          "warn",
+          { "argsIgnorePattern": "^_" }
+        ],
+        "@typescript-eslint/consistent-type-imports": "error",
+        "@typescript-eslint/no-floating-promises": "error",
+        "@typescript-eslint/no-misused-promises": "error",
+        "@typescript-eslint/no-explicit-any": "warn",
 
-  // Angular template files (.html and inline templates)
-  {
-    files: ["**/*.html"],
-    languageOptions: {
-      parser: templateParser,
+        "@angular-eslint/directive-selector": [
+          "error",
+          { "type": "attribute", "prefix": "app", "style": "camelCase" }
+        ],
+        "@angular-eslint/component-selector": [
+          "error",
+          { "type": "element", "prefix": "app", "style": "kebab-case" }
+        ],
+
+        "prettier/prettier": "error"
+      }
     },
-    plugins: {
-      "@angular-eslint/template": templatePlugin,
-    },
-    rules: {
-      // Template specific rules
-      "@angular-eslint/template/no-negated-async": "error",
-      // ...other template rules
-    },
-  },
-];
+    {
+      "files": ["**/*.html"],
+      "parser": "@angular-eslint/template-parser",
+      "plugins": ["@angular-eslint/template"],
+      "extends": ["plugin:@angular-eslint/template/recommended"],
+      "rules": {
+        "@angular-eslint/template/no-negated-async": "warn",
+        "@angular-eslint/template/eqeqeq": "error"
+      }
+    }
+  ]
+}
+
