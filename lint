@@ -1,188 +1,52 @@
-# in your workspace root
-ng add @angular-eslint/schematics
-# or if you have multiple projects and want to add to one:
-ng g angular-eslint:add-eslint-to-project your-project-name
+2. Install Playwright
+
+You can install Playwright using npm. There are two options:
+
+Option 1: Install Playwright as a dev dependency (recommended)
+
+npm install -D @playwright/test
 
 
-npm install -D \
-  eslint \
-  @typescript-eslint/parser \
-  @typescript-eslint/eslint-plugin \
-  @angular-eslint/eslint-plugin \
-  @angular-eslint/eslint-plugin-template \
-  @angular-eslint/template-parser \
-  eslint-plugin-prettier \
-  eslint-config-prettier
+-D means it will be installed as a dev dependency (only needed during development/testing).
+
+@playwright/test is the official Playwright testing library.
+
+3. Install the browsers
+
+After installing Playwright, you need to install the browsers it will use for testing:
+
+npx playwright install
 
 
-npm i -D prettier eslint-config-prettier
+This will download Chromium, Firefox, and WebKit by default.
 
-// .vscode/settings.json
-{
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": true
-  },
-  "eslint.validate": ["typescript", "html"]
-}
+4. Optional: Initialize Playwright config
 
-Check that angular.json has lint configured
-"lint": {
-  "builder": "@angular-eslint/builder:lint",
-  "options": {
-    "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
-  }
-}
+You can generate a default configuration file for Playwright in your project:
 
---------------------
-"scripts": {
-  "lint": "ng lint",
-  "lint:fix": "npx eslint . --ext .ts,.html --fix",
-  "lint:ci": "npx eslint . --ext .ts,.html"
-}
+npx playwright init
 
 
+This will:
 
-// eslint.config.js
-import js from '@eslint/js';
-import tseslint from 'typescript-eslint';
-import angular from '@angular-eslint/eslint-plugin';
-import angularTemplate from '@angular-eslint/eslint-plugin-template';
-import angularTemplateParser from '@angular-eslint/template-parser';
-import prettier from 'eslint-config-prettier';
-import prettierPlugin from 'eslint-plugin-prettier';
+Create playwright.config.ts
 
-export default [
-  // ===============================
-  // TypeScript + Angular rules
-  // ===============================
-  {
-    files: ['**/*.ts'],
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'tmp/**', '.angular/**'],
-    languageOptions: {
-      parser: tseslint.parser,
-      parserOptions: {
-        project: ['./tsconfig.json'],
-        tsconfigRootDir: import.meta.dirname,
-        sourceType: 'module'
-      }
-    },
-    plugins: {
-      '@angular-eslint': angular,
-      '@typescript-eslint': tseslint.plugin,
-      prettier: prettierPlugin
-    },
-    extends: [
-      js.configs.recommended,
-      ...tseslint.configs.recommendedTypeChecked,
-      'plugin:@angular-eslint/recommended',
-      prettier
-    ],
-    rules: {
-      // ===== TypeScript
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
-      '@typescript-eslint/consistent-type-imports': 'error',
-      '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/no-misused-promises': 'error',
-      '@typescript-eslint/no-explicit-any': 'warn',
+Set up example tests
 
-      // ===== Angular
-      '@angular-eslint/directive-selector': [
-        'error',
-        { type: 'attribute', prefix: 'app', style: 'camelCase' }
-      ],
-      '@angular-eslint/component-selector': [
-        'error',
-        { type: 'element', prefix: 'app', style: 'kebab-case' }
-      ],
+Optionally create a test directory (usually tests/)
 
-      // ===== Prettier
-      'prettier/prettier': 'error'
-    }
-  },
+5. Create a test
 
-  // ===============================
-  // Angular Template (HTML)
-  // ===============================
-  {
-    files: ['**/*.html'],
-    languageOptions: {
-      parser: angularTemplateParser
-    },
-    plugins: {
-      '@angular-eslint/template': angularTemplate
-    },
-    extends: ['plugin:@angular-eslint/template/recommended'],
-    rules: {
-      '@angular-eslint/template/no-negated-async': 'warn',
-      '@angular-eslint/template/eqeqeq': 'error'
-    }
-  }
-];
+Inside your Angular project, you can create a folder for tests, for example e2e/:
+
+mkdir e2e
 
 
----------------
-{
-  "root": true,
-  "ignorePatterns": [
-    "dist/",
-    "node_modules/",
-    "coverage/",
-    "tmp/",
-    ".angular/"
-  ],
-  "overrides": [
-    {
-      "files": ["**/*.ts"],
-      "parser": "@typescript-eslint/parser",
-      "parserOptions": {
-        "project": ["tsconfig.json"],
-        "tsconfigRootDir": ".",
-        "sourceType": "module"
-      },
-      "plugins": [
-        "@angular-eslint",
-        "@typescript-eslint",
-        "prettier"
-      ],
-      "extends": [
-        "eslint:recommended",
-        "plugin:@typescript-eslint/recommended",
-        "plugin:@typescript-eslint/recommended-requiring-type-checking",
-        "plugin:@angular-eslint/recommended",
-        "prettier"
-      ],
-      "rules": {
-        "@typescript-eslint/no-unused-vars": [
-          "warn",
-          { "argsIgnorePattern": "^_" }
-        ],
-        "@typescript-eslint/consistent-type-imports": "error",
-        "@typescript-eslint/no-floating-promises": "error",
-        "@typescript-eslint/no-misused-promises": "error",
-        "@typescript-eslint/no-explicit-any": "warn",
+Then create a sample test, e.g., example.spec.ts:
 
-        "@angular-eslint/directive-selector": [
-          "error",
-          { "type": "attribute", "prefix": "app", "style": "camelCase" }
-        ],
-        "@angular-eslint/component-selector": [
-          "error",
-          { "type": "element", "prefix": "app", "style": "kebab-case" }
-        ],
+import { test, expect } from '@playwright/test';
 
-        "prettier/prettier": "error"
-      }
-    },
-    {
-      "files": ["**/*.html"],
-      "parser": "@angular-eslint/template-parser",
-      "plugins": ["@angular-eslint/template"],
-      "extends": ["plugin:@angular-eslint/template/recommended"],
-      "rules": {
-        "@angular-eslint/template/no-negated-async": "warn",
-        "@angular-eslint/template/eqeqeq": "error"
-      }
-    }
-  ]
-}
-
+test('homepage has title', async ({ page }) => {
+  await page.goto('http://localhost:4200');
+  await expect(page).toHaveTitle(/Angular App/);
+});
