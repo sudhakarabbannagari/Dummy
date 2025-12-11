@@ -1,0 +1,90 @@
+# in your workspace root
+ng add @angular-eslint/schematics
+# or if you have multiple projects and want to add to one:
+ng g angular-eslint:add-eslint-to-project your-project-name
+
+
+npm i -D prettier eslint-config-prettier
+
+// .vscode/settings.json
+{
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "eslint.validate": ["typescript", "html"]
+}
+
+Check that angular.json has lint configured
+"lint": {
+  "builder": "@angular-eslint/builder:lint",
+  "options": {
+    "lintFilePatterns": ["src/**/*.ts", "src/**/*.html"]
+  }
+}
+
+--------------------
+"scripts": {
+  "lint": "ng lint",
+  "lint:fix": "npx eslint . --ext .ts,.html --fix",
+  "lint:ci": "npx eslint . --ext .ts,.html"
+}
+
+---------
+// eslint.config.cjs
+// Minimal example for an Angular 20 workspace using ESLint v9 + @angular-eslint
+// Tweak rules/plugins as your team requires.
+
+const { defineConfig } = require("eslint/config"); // optional helper
+const js = require("@eslint/js");
+const typescriptParser = require("@typescript-eslint/parser");
+const typescriptPlugin = require("@typescript-eslint/eslint-plugin");
+const angularPlugin = require("@angular-eslint/eslint-plugin");
+const templatePlugin = require("@angular-eslint/eslint-plugin-template");
+const templateParser = require("@angular-eslint/template-parser");
+
+module.exports = [
+  // Basic JS recommended set (optional)
+  js.configs.recommended,
+
+  // TypeScript / Angular TS files (.ts)
+  {
+    files: ["**/*.ts"],
+    languageOptions: {
+      parser: typescriptParser,
+      parserOptions: {
+        project: "./tsconfig.json", // for typed rules if you want typed linting
+        ecmaVersion: 2024,
+        sourceType: "module",
+      },
+    },
+    plugins: {
+      "@typescript-eslint": typescriptPlugin,
+      "@angular-eslint": angularPlugin,
+    },
+    rules: {
+      // Example rule overrides:
+      "no-console": ["warn", { allow: ["warn", "error"] }],
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      // Angular-specific rules:
+      "@angular-eslint/component-class-suffix": ["error", { suffixes: ["Component"] }],
+      // Add or tweak rules for your codebase...
+    },
+    ignores: ["dist/**", "node_modules/**"],
+  },
+
+  // Angular template files (.html and inline templates)
+  {
+    files: ["**/*.html"],
+    languageOptions: {
+      parser: templateParser,
+    },
+    plugins: {
+      "@angular-eslint/template": templatePlugin,
+    },
+    rules: {
+      // Template specific rules
+      "@angular-eslint/template/no-negated-async": "error",
+      // ...other template rules
+    },
+  },
+];
