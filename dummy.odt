@@ -1,0 +1,206 @@
+Using a Single Domain for Both UI and API on AWS ECS
+Overview
+
+This document describes how to expose both a web UI and backend APIs under a single domain when running workloads on AWS ECS. This approach is common for modern web applications and works well with Application Load Balancers (ALB), path-based routing, and containerized services.
+
+Example goal:
+
+One domain: https://app.example.com
+
+UI served at: /
+
+API served at: /api/*
+
+No separate subdomain (like api.example.com) is required.
+
+Why Use a Single Domain?
+Benefits
+
+Simpler DNS & TLS: One ACM certificate, one DNS record
+
+No CORS issues: UI and API share the same origin
+
+Cleaner URLs: Easier for users and documentation
+
+Centralized routing: ALB handles traffic separation
+
+Trade-offs
+
+UI and API lifecycles are logically coupled at the load balancer
+
+Requires careful path/versioning strategy for APIs
+
+High-Level Architecture
+User Browser
+     |
+     v
+https://app.example.com
+     |
+Application Load Balancer (ALB)
+     |
+     +-- /          -> ECS Service: UI (React / Next.js / Nginx)
+     +-- /api/*     -> ECS Service: API (Node.js / Java / Python)
+Core AWS Components
+
+Route 53 – DNS record for app.example.com
+
+ACM – TLS certificate for the domain
+
+Application Load Balancer – HTTPS termination and routing
+
+ECS (Fargate or EC2) – Runs UI and API containers
+
+Target Groups – One per ECS service
+
+Routing Strategy (Path-Based Routing)
+
+The ALB listener (port 443) uses path-based rules:
+
+Path Pattern	Target Group	Service
+/api/*	api-tg	Backend API ECS service
+/*	ui-tg	Frontend UI ECS service
+
+Rule priority is important: /api/* must be evaluated before /*.
+
+Example URLs
+UI
+
+https://app.example.com/
+
+https://app.example.com/login
+
+https://app.example.com/dashboard
+
+API
+
+https://app.example.com/api/health
+
+https://app.example.com/api/v1/users
+
+https://app.example.com/api/v1/orders/123
+
+Example: ALB Listener Rules
+
+Listener: HTTPS : 443
+
+Rule 1
+
+Condition: Path is /api/*
+
+Action: Forward to api-target-group
+
+Rule 2 (Default)
+
+Condition: Path is /*
+
+Action: Forward to ui-target-group
+
+ECS Service Layout
+UI Service
+
+Container: Nginx / Node.js
+
+Port: 80 or 3000
+
+Task Definition: ui-task
+
+Target Group: ui-tg
+
+API Service
+
+Container: Node.js / Spring Boot / FastAPI
+
+Port: 8080
+
+Task Definition: api-task
+
+Target Group: api-tg
+
+Frontend Configuration Example
+
+The UI should call APIs using relative paths:
+
+fetch('/api/v1/users');
+
+This ensures:
+
+Works locally with a proxy
+
+Works in production without domain changes
+
+Avoids CORS preflight requests
+
+API Versioning Best Practice
+
+Use explicit versioning under /api:
+
+/api/v1/...
+/api/v2/...
+
+This allows:
+
+Backward compatibility
+
+Parallel deployments
+
+Safe rollouts
+
+Security Considerations
+
+Use HTTPS only (redirect HTTP → HTTPS)
+
+Apply AWS WAF at the ALB level if needed
+
+Use security groups to restrict container access to ALB only
+
+Authenticate APIs (JWT, OAuth2, or ALB auth)
+
+When to Use Separate Domains Instead
+
+Consider api.example.com if:
+
+Public APIs are consumed by third parties
+
+Different rate limits or WAF rules are required
+
+You need independent scaling and ownership boundaries
+
+Summary
+
+Using a single domain for both UI and API on AWS ECS is a clean and scalable pattern:
+
+Route traffic with ALB path-based rules
+
+Serve UI at /, APIs at /api/*
+
+Reduce CORS, DNS, and TLS complexity
+
+Keep infrastructure simple and maintainable
+
+This setup is production-proven and works well for most internal and customer-facing web applications.
+
+I’ve created a ready-to-paste Confluence page in the canvas that explains how to use one URL (same domain) for both UI and API on AWS ECS, complete with:
+
+Clear architecture diagram (text-based)
+
+ALB path-based routing explanation
+
+Concrete URL examples (/ vs /api/*)
+
+ECS + ALB configuration guidance
+
+Frontend and API best practices
+
+Security and versioning recommendations
+
+When not to use this pattern
+
+If you want, I can:
+
+Tailor it to Fargate vs EC2
+
+Add Terraform / CloudFormation examples
+
+Adapt it to Next.js, React, Spring Boot, or FastAPI
+
+Rewrite it in your company’s Confluence template style
