@@ -1,0 +1,287 @@
+You can serve both your UI and API on one URL (same domain) on AWS ECS in a few common, clean ways. The standard and recommended approach is path-based routing with an Application Load Balancer (ALB).
+
+✅ Recommended: Single Domain + Path-Based Routing (ALB)
+
+Example
+
+https://example.com        → UI
+https://example.com/api    → API
+
+Architecture
+Route 53
+   ↓
+Application Load Balancer (HTTPS)
+   ├── /        → UI ECS Service (Target Group A)
+   └── /api/*   → API ECS Service (Target Group B)
+
+How it works
+
+One ALB
+
+One domain (e.g., example.com)
+
+Two ECS services (can be in same or different clusters)
+
+ALB listener rules route traffic by path
+
+ALB Listener Rules (HTTPS :443)
+Priority	Path Pattern	Target Group
+1	/api/*	API service
+2	/*	UI service
+Pros
+
+✅ Clean URLs
+✅ No CORS issues
+✅ Scales independently
+✅ Very common production setup
+
+🐳 ECS Service Setup
+
+Each service has:
+
+Its own task definition
+
+Its own target group
+
+Port mappings (e.g., UI on 3000, API on 8080)
+
+ALB forwards traffic to the correct container port automatically.
+
+🔐 HTTPS
+
+Use ACM certificate
+
+Attach it to the ALB listener
+
+Works for both UI and API automatically
+
+⚡ Alternative Options (When to Use)
+1️⃣ Reverse Proxy Container (Nginx)
+example.com → Nginx → UI & API containers
+
+
+One ECS service
+
+Nginx routes /api internally
+
+❌ Less scalable
+
+❌ Single point of failure
+
+Use only for small apps.
+
+2️⃣ CloudFront in Front of ALB
+CloudFront
+   ↓
+ALB
+
+
+Good if you want:
+
+Caching UI assets
+
+WAF
+
+Global edge performance
+
+Still same domain, same routing logic.
+
+🧠 Best Practice Summary
+Requirement	Best Choice
+Single domain	ALB
+UI + API	Path-based routing
+HTTPS	ACM + ALB
+Scalability	Separate ECS services
+No CORS	Same domain
+
+If you want, I can:
+
+Provide Terraform / CDK
+
+Show ECS + ALB JSON
+
+Recommend Fargate vs EC2
+
+Help with Next.js / React + API routing
+
+Just tell me your stack.
+
+one URL (same domain) for both your UI and API on AWS ECS for documentation with example
+
+Below is documentation-style guidance you can drop into internal docs or a README. It explains how to expose both a UI and an API under one URL (same domain) on AWS ECS, with a concrete example.
+
+Serving UI and API on One Domain Using AWS ECS
+
+This document describes how to expose both a frontend UI and a backend API under a single domain using AWS ECS and an Application Load Balancer (ALB).
+
+Overview
+
+Goal
+
+Serve:
+
+UI at /
+
+API at /api
+
+Using:
+
+https://example.com        → UI
+https://example.com/api    → API
+
+Architecture
+User
+ ↓
+Route 53 (example.com)
+ ↓
+Application Load Balancer (HTTPS)
+ ├── Path: /api/* → API ECS Service
+ └── Path: /*     → UI ECS Service
+
+Components
+AWS Services Used
+
+Route 53 – DNS
+
+Application Load Balancer (ALB) – Path-based routing
+
+ECS (Fargate or EC2) – Container orchestration
+
+ACM (AWS Certificate Manager) – TLS certificate
+
+Example Setup
+Example Domain
+example.com
+
+Example Containers
+Service	Container	Port
+UI	React / Next.js	3000
+API	Node.js / FastAPI	8080
+Step 1: Create ECS Services
+
+Create two ECS services, each with its own task definition.
+
+UI Service
+
+Container listens on 3000
+
+Serves static files or SSR UI
+
+API Service
+
+Container listens on 8080
+
+Exposes REST endpoints
+
+Step 2: Create Target Groups
+
+Create two ALB target groups:
+
+Target Group	Protocol	Port	Used By
+ui-target-group	HTTP	3000	UI service
+api-target-group	HTTP	8080	API service
+
+Each ECS service registers its tasks with its respective target group.
+
+Step 3: Configure Application Load Balancer
+Listener
+
+HTTPS (443)
+
+Certificate from ACM for example.com
+
+Listener Rules (Order Matters)
+Priority	Condition	Action
+1	Path is /api/*	Forward to api-target-group
+2	Path is /*	Forward to ui-target-group
+
+This ensures API traffic is routed correctly before the UI catch-all rule.
+
+Step 4: Configure DNS
+
+In Route 53:
+
+Create an A record
+
+Alias it to the ALB
+
+Domain: example.com
+
+Resulting Behavior
+URL	Routed To
+https://example.com	UI ECS Service
+https://example.com/login	UI ECS Service
+https://example.com/api/users	API ECS Service
+https://example.com/api/health	API ECS Service
+Example API Route
+GET https://example.com/api/health
+
+
+Response:
+
+{
+  "status": "ok"
+}
+
+Example UI Fetch Call
+fetch("/api/users")
+  .then(res => res.json())
+  .then(data => console.log(data))
+
+
+✔ No CORS configuration required
+✔ Same-origin requests
+
+Security & HTTPS
+
+TLS termination handled by ALB
+
+Containers receive plain HTTP traffic
+
+Optional:
+
+AWS WAF
+
+Authentication middleware in API
+
+Best Practices
+
+Keep UI and API as separate ECS services
+
+Use path-based routing, not ports
+
+Do not expose containers publicly
+
+Scale UI and API independently
+
+Use /api as a fixed prefix
+
+When to Use This Pattern
+
+✅ Single-page apps + APIs
+✅ Microservices behind one domain
+✅ Avoiding CORS complexity
+✅ Production ECS workloads
+
+Alternatives (Not Recommended for Large Systems)
+Option	Reason
+Single ECS service with Nginx	Harder to scale
+Different subdomains	Adds CORS complexity
+Different ports	Poor UX
+Summary
+
+Using AWS ALB path-based routing, you can serve both UI and API from a single domain while keeping services isolated, scalable, and secure.
+
+example.com        → UI
+example.com/api    → API
+
+
+If you want, I can also provide:
+
+Terraform or CDK examples
+
+A diagram image
+
+Nginx config comparison
+
+Next.js or React-specific notes
