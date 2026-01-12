@@ -1,0 +1,99 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Secure S3 bucket with KMS encryption for AWS Fault Injection Simulator (FIS)
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket for FIS artifacts/logs
+
+Resources:
+
+  FISKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for encrypting FIS S3 bucket
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          # Account root access
+          - Sid: EnableRootPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: "kms:*"
+            Resource: "*"
+
+          # Allow FIS service to use the key
+          - Sid: AllowFISService
+            Effect: Allow
+            Principal:
+              Service: fis.amazonaws.com
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+
+  FISKmsKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/fis-s3-key
+      TargetKeyId: !Ref FISKmsKey
+
+  FISS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref FISKmsKey
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+
+  FISS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FISS3Bucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+
+          # Enforce HTTPS
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub "${FISS3Bucket.Arn}"
+              - !Sub "${FISS3Bucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+          # Enforce KMS encryption
+          - Sid: DenyUnEncryptedObjectUploads
+            Effect: Deny
+            Principal: "*"
+            Action: s3:PutObject
+            Resource: !Sub "${FISS3Bucket.Arn}/*"
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: aws:kms
+
+Outputs:
+  BucketName:
+    Value: !Ref FISS3Bucket
+  KmsKeyId:
+    Value: !Ref FISKmsKey
