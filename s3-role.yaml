@@ -1,0 +1,75 @@
+CloudFormation Example (YAML)
+Parameters (replace principal as needed)
+Parameters:
+  ExperimentRoleArn:
+    Type: String
+    Description: ARN of the role/service that writes experiment reports
+
+KMS Key (correct policy for S3 + experiment role)
+Resources:
+  ExperimentKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for experiment report bucket
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          # Root account full access
+          - Sid: EnableRootPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: "kms:*"
+            Resource: "*"
+
+          # Allow experiment role to use the key
+          - Sid: AllowExperimentUse
+            Effect: Allow
+            Principal:
+              AWS: !Ref ExperimentRoleArn
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: "*"
+
+S3 Bucket (KMS encrypted)
+  ExperimentReportBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref ExperimentKmsKey
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+S3 Bucket Policy (PutObject permission)
+  ExperimentBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ExperimentReportBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowExperimentPutObject
+            Effect: Allow
+            Principal:
+              AWS: !Ref ExperimentRoleArn
+            Action:
+              - s3:PutObject
+            Resource: !Sub "${ExperimentReportBucket.Arn}/*"
+
+If this is AWS Fault Injection Simulator (FIS)
+
+Use this as the principal instead:
+
+Principal:
+  Service: fis.amazonaws.com
