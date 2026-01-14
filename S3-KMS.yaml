@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: S3 bucket with KMS encryption for experiment reports
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: Name of the S3 bucket for experiment reports
+
+  ExperimentRoleArn:
+    Type: String
+    Description: IAM Role ARN used by experiments (must write reports)
+
+Resources:
+
+  ExperimentKmsKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for encrypting experiment reports in S3
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          # Root admin
+          - Sid: AllowRootAccount
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: "kms:*"
+            Resource: "*"
+
+          # Allow experiment role to use the key
+          - Sid: AllowExperimentRoleUsage
+            Effect: Allow
+            Principal:
+              AWS: !Ref ExperimentRoleArn
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:GenerateDataKey
+              - kms:DescribeKey
+            Resource: "*"
+
+  ExperimentKmsAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/experiment-s3-key
+      TargetKeyId: !Ref ExperimentKmsKey
+
+  ExperimentReportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref ExperimentKmsKey
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ExperimentReportsBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref ExperimentReportsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowExperimentRolePutObject
+            Effect: Allow
+            Principal:
+              AWS: !Ref ExperimentRoleArn
+            Action:
+              - s3:PutObject
+              - s3:AbortMultipartUpload
+            Resource: !Sub "${ExperimentReportsBucket.Arn}/*"
+
+Outputs:
+  BucketName:
+    Value: !Ref ExperimentReportsBucket
+
+  KmsKeyArn:
+    Value: !GetAtt ExperimentKmsKey.Arn
