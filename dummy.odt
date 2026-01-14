@@ -1,206 +1,333 @@
-Using a Single Domain for Both UI and API on AWS ECS
-Overview
+# AWS Resilience Testing
 
-This document describes how to expose both a web UI and backend APIs under a single domain when running workloads on AWS ECS. This approach is common for modern web applications and works well with Application Load Balancers (ALB), path-based routing, and containerized services.
+## 1. Purpose
 
-Example goal:
+This document defines the strategy, processes, tools, and governance for resilience testing on AWS. The goal is to validate that systems can **withstand, adapt to, and recover from failures** while continuing to meet business and customer expectations.
 
-One domain: https://app.example.com
+Resilience testing ensures:
 
-UI served at: /
+* High availability and fault tolerance
+* Controlled failure recovery
+* Compliance with RTO/RPO objectives
+* Confidence during real-world incidents
 
-API served at: /api/*
+---
 
-No separate subdomain (like api.example.com) is required.
+## 2. Scope
 
-Why Use a Single Domain?
-Benefits
+This document applies to:
 
-Simpler DNS & TLS: One ACM certificate, one DNS record
+* All production and pre-production AWS workloads
+* Microservices, monoliths, and serverless architectures
+* Infrastructure, application, data, and operational layers
 
-No CORS issues: UI and API share the same origin
+Included services:
 
-Cleaner URLs: Easier for users and documentation
+* EC2, Auto Scaling, ELB/ALB/NLB
+* ECS, EKS, Lambda
+* RDS, Aurora, DynamoDB, S3
+* Route 53, CloudFront
+* IAM, KMS, Secrets Manager
 
-Centralized routing: ALB handles traffic separation
+---
 
-Trade-offs
+## 3. Key Resilience Concepts
 
-UI and API lifecycles are logically coupled at the load balancer
+### 3.1 High Availability (HA)
 
-Requires careful path/versioning strategy for APIs
+Designing systems to remain operational during failures by using:
 
-High-Level Architecture
-User Browser
-     |
-     v
-https://app.example.com
-     |
-Application Load Balancer (ALB)
-     |
-     +-- /          -> ECS Service: UI (React / Next.js / Nginx)
-     +-- /api/*     -> ECS Service: API (Node.js / Java / Python)
-Core AWS Components
+* Multi-AZ deployments
+* Redundant components
+* Load balancing
 
-Route 53 – DNS record for app.example.com
+### 3.2 Fault Tolerance
 
-ACM – TLS certificate for the domain
+Ability to continue operating when components fail without manual intervention.
 
-Application Load Balancer – HTTPS termination and routing
+### 3.3 Disaster Recovery (DR)
 
-ECS (Fargate or EC2) – Runs UI and API containers
+Ability to recover from catastrophic failures such as region loss.
 
-Target Groups – One per ECS service
+### 3.4 Chaos Engineering
 
-Routing Strategy (Path-Based Routing)
+Intentional injection of failures to validate resilience assumptions.
 
-The ALB listener (port 443) uses path-based rules:
+---
 
-Path Pattern	Target Group	Service
-/api/*	api-tg	Backend API ECS service
-/*	ui-tg	Frontend UI ECS service
+## 4. Resilience Objectives
 
-Rule priority is important: /api/* must be evaluated before /*.
+### 4.1 Availability Targets
 
-Example URLs
-UI
+| Tier              | Availability |
+| ----------------- | ------------ |
+| Tier 0 (Critical) | 99.99%       |
+| Tier 1            | 99.9%        |
+| Tier 2            | 99.5%        |
 
-https://app.example.com/
+### 4.2 Recovery Objectives
 
-https://app.example.com/login
+* **RTO (Recovery Time Objective):** Maximum acceptable downtime
+* **RPO (Recovery Point Objective):** Maximum acceptable data loss
 
-https://app.example.com/dashboard
+---
 
-API
+## 5. AWS Well-Architected Framework Alignment
 
-https://app.example.com/api/health
+This testing strategy aligns with the **Reliability Pillar**:
 
-https://app.example.com/api/v1/users
+* Foundations
+* Workload architecture
+* Change management
+* Failure management
 
-https://app.example.com/api/v1/orders/123
+---
 
-Example: ALB Listener Rules
+## 6. Resilience Testing Types
 
-Listener: HTTPS : 443
+### 6.1 Infrastructure Failure Testing
 
-Rule 1
+Validates resilience against infrastructure-level failures.
 
-Condition: Path is /api/*
+Examples:
 
-Action: Forward to api-target-group
+* EC2 instance termination
+* AZ outage simulation
+* Auto Scaling failure
 
-Rule 2 (Default)
+### 6.2 Application Failure Testing
 
-Condition: Path is /*
+Validates application behavior under stress or failure.
 
-Action: Forward to ui-target-group
+Examples:
 
-ECS Service Layout
-UI Service
+* Application process crashes
+* Dependency timeouts
+* Circuit breaker validation
 
-Container: Nginx / Node.js
+### 6.3 Network Failure Testing
 
-Port: 80 or 3000
+Validates system behavior during network issues.
 
-Task Definition: ui-task
+Examples:
 
-Target Group: ui-tg
+* Security Group rule changes
+* Route table misconfigurations
+* DNS resolution failures
 
-API Service
+### 6.4 Data Layer Failure Testing
 
-Container: Node.js / Spring Boot / FastAPI
+Validates database and storage resilience.
 
-Port: 8080
+Examples:
 
-Task Definition: api-task
+* RDS failover
+* DynamoDB throttling
+* S3 access denial
 
-Target Group: api-tg
+### 6.5 Region and AZ Failure Testing
 
-Frontend Configuration Example
+Validates large-scale disaster recovery.
 
-The UI should call APIs using relative paths:
+Examples:
 
-fetch('/api/v1/users');
+* Primary region isolation
+* Cross-region failover
 
-This ensures:
+---
 
-Works locally with a proxy
+## 7. Testing Environments
 
-Works in production without domain changes
+| Environment       | Purpose                  |
+| ----------------- | ------------------------ |
+| Sandbox           | Early experimentation    |
+| Non-Prod          | Planned resilience tests |
+| Prod (Controlled) | GameDays and Chaos tests |
 
-Avoids CORS preflight requests
+**Note:** Production testing requires executive approval and rollback plans.
 
-API Versioning Best Practice
+---
 
-Use explicit versioning under /api:
+## 8. Testing Tools and Services
 
-/api/v1/...
-/api/v2/...
+### 8.1 AWS Fault Injection Service (FIS)
 
-This allows:
+Used to simulate failures such as:
 
-Backward compatibility
+* Instance termination
+* CPU/memory stress
+* Network latency
 
-Parallel deployments
+### 8.2 Chaos Engineering Tools
 
-Safe rollouts
+* AWS FIS
+* Chaos Monkey (EC2/EKS)
+* LitmusChaos (Kubernetes)
 
-Security Considerations
+### 8.3 Monitoring and Observability
 
-Use HTTPS only (redirect HTTP → HTTPS)
+* Amazon CloudWatch
+* AWS X-Ray
+* CloudTrail
+* OpenTelemetry
 
-Apply AWS WAF at the ALB level if needed
+---
 
-Use security groups to restrict container access to ALB only
+## 9. Test Scenarios
 
-Authenticate APIs (JWT, OAuth2, or ALB auth)
+### 9.1 EC2 Instance Failure
 
-When to Use Separate Domains Instead
+**Objective:** Validate Auto Scaling recovery
 
-Consider api.example.com if:
+Steps:
 
-Public APIs are consumed by third parties
+1. Terminate EC2 instance via FIS
+2. Observe ASG replacement
+3. Verify load balancer health
 
-Different rate limits or WAF rules are required
+Success Criteria:
 
-You need independent scaling and ownership boundaries
+* No customer-visible outage
+* Instance replaced within SLA
 
-Summary
+---
 
-Using a single domain for both UI and API on AWS ECS is a clean and scalable pattern:
+### 9.2 AZ Failure Simulation
 
-Route traffic with ALB path-based rules
+**Objective:** Validate Multi-AZ resilience
 
-Serve UI at /, APIs at /api/*
+Steps:
 
-Reduce CORS, DNS, and TLS complexity
+1. Block traffic to one AZ
+2. Observe traffic redistribution
 
-Keep infrastructure simple and maintainable
+Success Criteria:
 
-This setup is production-proven and works well for most internal and customer-facing web applications.
+* Services remain operational
+* Error rate < threshold
 
-I’ve created a ready-to-paste Confluence page in the canvas that explains how to use one URL (same domain) for both UI and API on AWS ECS, complete with:
+---
 
-Clear architecture diagram (text-based)
+### 9.3 Database Failover
 
-ALB path-based routing explanation
+**Objective:** Validate RDS/Aurora failover
 
-Concrete URL examples (/ vs /api/*)
+Steps:
 
-ECS + ALB configuration guidance
+1. Trigger forced failover
+2. Monitor application behavior
 
-Frontend and API best practices
+Success Criteria:
 
-Security and versioning recommendations
+* Failover < RTO
+* No data corruption
 
-When not to use this pattern
+---
 
-If you want, I can:
+## 10. Chaos Engineering GameDays
 
-Tailor it to Fargate vs EC2
+### 10.1 GameDay Objectives
 
-Add Terraform / CloudFormation examples
+* Validate assumptions
+* Improve team readiness
+* Identify hidden dependencies
 
-Adapt it to Next.js, React, Spring Boot, or FastAPI
+### 10.2 GameDay Structure
 
-Rewrite it in your company’s Confluence template style
+1. Planning and approvals
+2. Hypothesis definition
+3. Failure injection
+4. Observation and metrics
+5. Retrospective
+
+---
+
+## 11. Metrics and KPIs
+
+Key metrics:
+
+* Availability %
+* Mean Time to Detect (MTTD)
+* Mean Time to Recover (MTTR)
+* Error rate
+* Customer impact duration
+
+---
+
+## 12. Risk Management
+
+### 12.1 Risk Assessment
+
+* Blast radius evaluation
+* Data integrity validation
+* Customer communication plans
+
+### 12.2 Rollback Strategy
+
+* Automated rollback
+* Manual intervention procedures
+
+---
+
+## 13. Roles and Responsibilities
+
+| Role            | Responsibility    |
+| --------------- | ----------------- |
+| Cloud Architect | Resilience design |
+| SRE             | Test execution    |
+| Dev Team        | Application fixes |
+| Security        | Compliance review |
+| Business Owner  | Risk acceptance   |
+
+---
+
+## 14. Change Management
+
+* All tests tracked via change tickets
+* Pre- and post-test approvals required
+* Incident bridge on standby
+
+---
+
+## 15. Reporting and Documentation
+
+Each test must produce:
+
+* Test summary
+* Observed failures
+* Metrics collected
+* Action items
+
+Reports stored in Confluence under:
+
+> Cloud Engineering → Resilience Testing
+
+---
+
+## 16. Continuous Improvement
+
+* Quarterly resilience reviews
+* Annual DR simulations
+* Post-incident resilience updates
+
+---
+
+## 17. Appendix
+
+### 17.1 References
+
+* AWS Well-Architected Framework
+* AWS Reliability Pillar
+* AWS Fault Injection Service
+
+### 17.2 Glossary
+
+* **RTO:** Recovery Time Objective
+* **RPO:** Recovery Point Objective
+* **MTTR:** Mean Time to Recover
+
+---
+
+**Document Owner:** Cloud Engineering Team
+**Last Updated:** TBD
+**Review Cycle:** Quarterly
