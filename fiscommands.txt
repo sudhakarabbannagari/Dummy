@@ -1,0 +1,167 @@
+This role is assumed by AWS Fault Injection Simulator and allows it to run EC2/SSM-based experiments.
+
+fis-experiment-role.yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Description: IAM Role for AWS Fault Injection Simulator (FIS) experiments
+
+Resources:
+  FISExperimentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: fis-experiment-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: fis.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: fis-experiment-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # EC2 actions (stop, reboot, terminate, etc.)
+              - Effect: Allow
+                Action:
+                  - ec2:RebootInstances
+                  - ec2:StopInstances
+                  - ec2:StartInstances
+                  - ec2:TerminateInstances
+                  - ec2:DescribeInstances
+                  - ec2:DescribeTags
+                Resource: "*"
+
+              # SSM actions (for CPU / network stress via SSM)
+              - Effect: Allow
+                Action:
+                  - ssm:SendCommand
+                  - ssm:GetCommandInvocation
+                  - ssm:ListCommands
+                Resource: "*"
+
+              # Required for tagging and experiment execution
+              - Effect: Allow
+                Action:
+                  - fis:*
+                  - iam:PassRole
+                Resource: "*"
+
+Outputs:
+  FISRoleArn:
+    Description: ARN of the FIS experiment role
+    Value: !GetAtt FISExperimentRole.Arn
+
+Deploy it
+aws cloudformation deploy \
+  --stack-name fis-experiment-role \
+  --template-file fis-experiment-role.yaml \
+  --capabilities CAPABILITY_NAMED_IAM
+
+2️⃣ Use This Role in an FIS Experiment
+
+When creating your FIS experiment template, set:
+
+roleArn: arn:aws:iam::<ACCOUNT_ID>:role/fis-experiment-role
+
+
+This tells FIS to assume the role automatically when running the experiment.
+
+3️⃣ Assume the Role Manually (CLI)
+
+If you want to assume the role and run AWS commands (for testing or debugging):
+
+Assume the role
+aws sts assume-role \
+  --role-arn arn:aws:iam::<ACCOUNT_ID>:role/fis-experiment-role \
+  --role-session-name fis-test-session
+
+Export credentials
+export AWS_ACCESS_KEY_ID=ASIA...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_SESSION_TOKEN=...
+
+4️⃣ Execute AWS Commands Using the Assumed Role
+
+Example commands:
+
+# Verify identity
+aws sts get-caller-identity
+
+# Describe EC2 instances
+aws ec2 describe-instances
+
+# Start an FIS experiment
+aws fis start-experiment \
+  --experiment-template-id EXTEMPLATE123
+
+
+List FIS experiment templates (get the template ID)
+aws fis list-experiment-templates \
+  --query "experimentTemplates[*].{ID:id,Name:name}" \
+  --output table
+
+
+This prints a clean table like:
+
+-----------------------------------
+|   ListExperimentTemplates       |
++----------------------+----------+
+| ID                   | Name     |
++----------------------+----------+
+| ext-0abc123def456    | cpu-chaos|
++----------------------+----------+
+
+
+📌 Save the ID for the next step.
+
+2️⃣ Get template ID by name (CI-safe, no manual lookup)
+
+If you already know the template name (recommended for CI):
+
+TEMPLATE_ID=$(aws fis list-experiment-templates \
+  --query "experimentTemplates[?name=='cpu-chaos'].id | [0]" \
+  --output text)
+
+
+Optional sanity check:
+
+echo "Template ID: $TEMPLATE_ID"
+
+3️⃣ Start the FIS experiment using the template ID
+aws fis start-experiment \
+  --experiment-template-id "$TEMPLATE_ID"
+
+4️⃣ Start experiment with a client token (best practice for CI)
+
+Prevents duplicate runs if the job retries:
+
+aws fis start-experiment \
+  --experiment-template-id "$TEMPLATE_ID" \
+  --client-token "$(uuidgen)"
+
+5️⃣ Full example (GitHub Actions / GitLab CI friendly)
+set -e
+
+TEMPLATE_NAME="cpu-chaos"
+
+TEMPLATE_ID=$(aws fis list-experiment-templates \
+  --query "experimentTemplates[?name=='${TEMPLATE_NAME}'].id | [0]" \
+  --output text)
+
+aws fis start-experiment \
+  --experiment-template-id "$TEMPLATE_ID" \
+  --client-token "$(uuidgen)"
+
+🔐 Required IAM permissions
+
+Your CI role/user must have:
+
+{
+  "Effect": "Allow",
+  "Action": [
+    "fis:ListExperimentTemplates",
+    "fis:StartExperiment"
+  ],
+  "Resource": "*"
+}
