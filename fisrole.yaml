@@ -85,3 +85,47 @@ jobs:
             --experiment-template-id ext-0abc123def456
 
 
+
+
+
+            FISCICDRole:
+  Type: AWS::IAM::Role
+  Properties:
+    RoleName: fis-ci-role
+    AssumeRolePolicyDocument:
+      Version: '2012-10-17'
+      Statement:
+        - Effect: Allow
+          Principal:
+            Federated: !Sub arn:aws:iam::${AWS::AccountId}:oidc-provider/token.actions.githubusercontent.com
+          Action: sts:AssumeRoleWithWebIdentity
+          Condition:
+            StringEquals:
+              token.actions.githubusercontent.com:aud: sts.amazonaws.com
+            StringLike:
+              token.actions.githubusercontent.com:sub: repo:ORG/REPO:ref:refs/heads/main
+
+    Policies:
+      - PolicyName: fis-control
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            # Start / manage experiments
+            - Effect: Allow
+              Action:
+                - fis:StartExperiment
+                - fis:StopExperiment
+                - fis:GetExperiment
+                - fis:ListExperiments
+                - fis:GetExperimentTemplate
+              Resource: "*"
+
+            # 🔴 CRITICAL — without this, experiment fails instantly
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: !GetAtt FISExecutionRole.Arn
+
+
+
+
+
