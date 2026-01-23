@@ -1,0 +1,87 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: IAM role for AWS Fault Injection Simulator (FIS) experiments
+
+Resources:
+  FISExperimentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: fis-experiment-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - fis.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: fis-experiment-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # FIS permissions
+              - Effect: Allow
+                Action:
+                  - fis:CreateExperiment
+                  - fis:StartExperiment
+                  - fis:StopExperiment
+                  - fis:GetExperiment
+                  - fis:GetExperimentTemplate
+                  - fis:ListExperiments
+                  - fis:ListExperimentTemplates
+                Resource: "*"
+
+              # EC2 actions commonly used in FIS experiments
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeInstances
+                  - ec2:DescribeVolumes
+                  - ec2:DescribeTags
+                  - ec2:RebootInstances
+                  - ec2:StopInstances
+                  - ec2:StartInstances
+                  - ec2:TerminateInstances
+                Resource: "*"
+
+              # CloudWatch logs & metrics (recommended)
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - cloudwatch:PutMetricData
+                Resource: "*"
+
+Outputs:
+  FISRoleArn:
+    Description: ARN of the IAM role used by AWS FIS
+    Value: !GetAtt FISExperimentRole.Arn
+1
+name: Run FIS Experiment
+
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  fis:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::<ACCOUNT_ID>:role/fis-ci-role
+          aws-region: us-east-1
+
+      - name: Start FIS experiment
+        run: |
+          aws fis start-experiment \
+            --experiment-template-id ext-0abc123def456
+
+
