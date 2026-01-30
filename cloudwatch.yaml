@@ -1,3 +1,155 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudWatch Dashboard for RDS SQL
+
+Parameters:
+  DBInstanceIdentifier:
+    Type: String
+    Description: RDS DB Instance Identifier
+
+Resources:
+  RDSCloudWatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "rds-${DBInstanceIdentifier}-dashboard"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "CPU Utilization",
+                "metrics": [
+                  [ "AWS/RDS", "CPUUtilization", "DBInstanceIdentifier", "${DBInstanceIdentifier}" ]
+                ],
+                "stat": "Average",
+                "period": 60,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Database Connections",
+                "metrics": [
+                  [ "AWS/RDS", "DatabaseConnections", "DBInstanceIdentifier", "${DBInstanceIdentifier}" ]
+                ],
+                "stat": "Average",
+                "period": 60,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Freeable Memory",
+                "metrics": [
+                  [ "AWS/RDS", "FreeableMemory", "DBInstanceIdentifier", "${DBInstanceIdentifier}" ]
+                ],
+                "stat": "Average",
+                "period": 60,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 6,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Free Storage Space",
+                "metrics": [
+                  [ "AWS/RDS", "FreeStorageSpace", "DBInstanceIdentifier", "${DBInstanceIdentifier}" ]
+                ],
+                "stat": "Average",
+                "period": 300,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Read / Write IOPS",
+                "metrics": [
+                  [ "AWS/RDS", "ReadIOPS", "DBInstanceIdentifier", "${DBInstanceIdentifier}" ],
+                  [ ".", "WriteIOPS", ".", "." ]
+                ],
+                "stat": "Average",
+                "period": 60,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 12,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Read / Write Latency",
+                "metrics": [
+                  [ "AWS/RDS", "ReadLatency", "DBInstanceIdentifier", "${DBInstanceIdentifier}" ],
+                  [ ".", "WriteLatency", ".", "." ]
+                ],
+                "stat": "Average",
+                "period": 60,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 18,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Read / Write Throughput",
+                "metrics": [
+                  [ "AWS/RDS", "ReadThroughput", "DBInstanceIdentifier", "${DBInstanceIdentifier}" ],
+                  [ ".", "WriteThroughput", ".", "." ]
+                ],
+                "stat": "Average",
+                "period": 60,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 18,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "title": "Replica Lag",
+                "metrics": [
+                  [ "AWS/RDS", "ReplicaLag", "DBInstanceIdentifier", "${DBInstanceIdentifier}" ]
+                ],
+                "stat": "Average",
+                "period": 60,
+                "region": "${AWS::Region}"
+              }
+            }
+          ]
+        }
+
+
+-----------------------------------------------------
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
   CloudWatch Dashboard for Amazon RDS SQL Server following AWS monitoring standards
