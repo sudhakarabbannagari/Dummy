@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Secure Power BI to Athena setup with KMS, Glue, and S3
+
+Parameters:
+  BucketName:
+    Type: String
+    Description: S3 bucket for Athena query results
+  PowerBIRoleName:
+    Type: String
+    Default: PowerBIAthenaRole
+
+Resources:
+
+  ### KMS Key ###
+  AthenaKMSKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: KMS key for Athena + S3 encryption
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnableRootPermissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action: "kms:*"
+            Resource: "*"
+
+  AthenaKMSAlias:
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: alias/athena-powerbi
+      TargetKeyId: !Ref AthenaKMSKey
+
+  ### S3 Bucket ###
+  AthenaResultsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: !Ref AthenaKMSKey
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  ### Enforce TLS ###
+  AthenaBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AthenaResultsBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: EnforceTLS
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !Sub ${AthenaResultsBucket.Arn}
+              - !Sub ${AthenaResultsBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  ### IAM Managed Policy ###
+  PowerBIManagedPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: PowerBIAthenaAccess
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+
+          # Athena
+          - Effect: Allow
+            Action:
+              - athena:StartQueryExecution
+              - athena:GetQueryExecution
+              - athena:GetQueryResults
+              - athena:StopQueryExecution
+              - athena:GetWorkGroup
+            Resource: "*"
+
+          # Glue Data Catalog
+          - Effect: Allow
+            Action:
+              - glue:GetDatabase
+              - glue:GetDatabases
+              - glue:GetTable
+              - glue:GetTables
+              - glue:GetPartition
+              - glue:GetPartitions
+            Resource: "*"
+
+          # S3 Access (Scoped)
+          - Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+            Resource:
+              - !Sub ${AthenaResultsBucket.Arn}
+              - !Sub ${AthenaResultsBucket.Arn}/*
+
+          # KMS Permissions
+          - Effect: Allow
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:GenerateDataKey
+              - kms:DescribeKey
+            Resource: !GetAtt AthenaKMSKey.Arn
+
+  ### IAM Role for Power BI ###
+  PowerBIRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref PowerBIRoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: "*" # Replace with your IdP or specific account
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref PowerBIManagedPolicy
+
+Outputs:
+  RoleArn:
+    Description: IAM Role ARN for Power BI
+    Value: !GetAtt PowerBIRole.Arn
+
+  BucketName:
+    Description: Athena results bucket
+    Value: !Ref AthenaResultsBucket
+
+  KMSKeyArn:
+    Description: KMS Key ARN
+    Value: !GetAtt AthenaKMSKey.Arn
