@@ -1,0 +1,161 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Update VPC Endpoint Policy using Lambda (Lambda package in S3)
+
+Parameters:
+
+  VpcEndpointId:
+    Type: String
+    Description: Existing VPC Endpoint ID
+    AllowedPattern: "^vpce-[a-zA-Z0-9]+$"
+
+  VpcEndpointPolicy:
+    Type: String
+    Description: JSON policy document
+
+  LambdaCodeBucket:
+    Type: String
+    Description: S3 bucket containing lambda zip
+
+  LambdaCodeKey:
+    Type: String
+    Description: S3 object key (example: lambda/vpc-endpoint-policy-updater.zip)
+
+Resources:
+
+################################################################################
+# IAM Role
+################################################################################
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-VpcEndpointPolicyRole"
+
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      Path: /
+
+      Policies:
+
+        - PolicyName: ModifyVpcEndpointPolicy
+
+          PolicyDocument:
+            Version: "2012-10-17"
+
+            Statement:
+
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVpcEndpoints
+                  - ec2:ModifyVpcEndpoint
+                Resource: "*"
+
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: "*"
+
+################################################################################
+# CloudWatch Logs
+################################################################################
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+
+    Properties:
+
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-VpcEndpointPolicyUpdater"
+
+      RetentionInDays: 30
+
+################################################################################
+# Lambda
+################################################################################
+
+  VPCEndpointPolicyLambda:
+
+    Type: AWS::Lambda::Function
+
+    DependsOn:
+      - LambdaLogGroup
+
+    Properties:
+
+      FunctionName: !Sub "${AWS::StackName}-VpcEndpointPolicyUpdater"
+
+      Runtime: python3.12
+
+      Handler: index.handler
+
+      MemorySize: 256
+
+      Timeout: 300
+
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+      Code:
+
+        S3Bucket: !Ref LambdaCodeBucket
+
+        S3Key: !Ref LambdaCodeKey
+
+################################################################################
+# Lambda Permission
+################################################################################
+
+  LambdaPermission:
+
+    Type: AWS::Lambda::Permission
+
+    Properties:
+
+      FunctionName: !Ref VPCEndpointPolicyLambda
+
+      Action: lambda:InvokeFunction
+
+      Principal: cloudformation.amazonaws.com
+
+################################################################################
+# Custom Resource
+################################################################################
+
+  UpdateVpcEndpointPolicy:
+
+    Type: Custom::VpcEndpointPolicy
+
+    Properties:
+
+      ServiceToken: !GetAtt VPCEndpointPolicyLambda.Arn
+
+      VpcEndpointId: !Ref VpcEndpointId
+
+      PolicyDocument: !Ref VpcEndpointPolicy
+
+################################################################################
+# Outputs
+################################################################################
+
+Outputs:
+
+  LambdaArn:
+    Description: Lambda ARN
+    Value: !GetAtt VPCEndpointPolicyLambda.Arn
+
+  LambdaRoleArn:
+    Description: IAM Role ARN
+    Value: !GetAtt LambdaExecutionRole.Arn
+
+  LogGroup:
+    Description: CloudWatch Log Group
+    Value: !Ref LambdaLogGroup
