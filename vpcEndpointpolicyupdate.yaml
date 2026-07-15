@@ -1,0 +1,143 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Update VPC Endpoint Policy using Lambda Custom Resource
+
+Parameters:
+
+  VpcEndpointId:
+    Type: String
+    Description: Existing VPC Endpoint ID
+
+Resources:
+
+###########################################################
+# IAM Role
+###########################################################
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub VPCEndpointPolicyUpdater-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      Policies:
+        - PolicyName: ModifyVpcEndpointPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+
+              - Effect: Allow
+                Action:
+                  - ec2:ModifyVpcEndpoint
+                  - ec2:DescribeVpcEndpoints
+                Resource: "*"
+
+              - Effect: Allow
+                Action:
+                  - logs:*
+                Resource: "*"
+
+###########################################################
+# Lambda
+###########################################################
+
+  VPCEndpointPolicyLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.12
+      Handler: index.handler
+      Timeout: 300
+      Role: !GetAtt LambdaExecutionRole.Arn
+
+      Code:
+        ZipFile: |
+          import boto3
+          import json
+          import urllib.request
+
+          ec2 = boto3.client('ec2')
+
+          def send(event, context, status, data):
+              response = {
+                  "Status": status,
+                  "Reason": "See CloudWatch Logs",
+                  "PhysicalResourceId": event.get("PhysicalResourceId","VpcEndpointPolicy"),
+                  "StackId": event["StackId"],
+                  "RequestId": event["RequestId"],
+                  "LogicalResourceId": event["LogicalResourceId"],
+                  "Data": data
+              }
+
+              req = urllib.request.Request(
+                  event['ResponseURL'],
+                  data=json.dumps(response).encode(),
+                  method='PUT'
+              )
+              urllib.request.urlopen(req)
+
+          def handler(event, context):
+
+              try:
+
+                  if event["RequestType"] in ["Create","Update"]:
+
+                      endpoint = event["ResourceProperties"]["VpcEndpointId"]
+
+                      policy = {
+                          "Version":"2012-10-17",
+                          "Statement":[
+                              {
+                                  "Effect":"Allow",
+                                  "Principal":"*",
+                                  "Action":"*",
+                                  "Resource":"*"
+                              }
+                          ]
+                      }
+
+                      ec2.modify_vpc_endpoint(
+                          VpcEndpointId=endpoint,
+                          PolicyDocument=json.dumps(policy)
+                      )
+
+                  send(event, context, "SUCCESS", {})
+
+              except Exception as e:
+                  print(e)
+                  send(event, context, "FAILED", {"Error": str(e)})
+
+###########################################################
+# Log Group
+###########################################################
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${VPCEndpointPolicyLambda}
+      RetentionInDays: 30
+
+###########################################################
+# Custom Resource
+###########################################################
+
+  UpdateVPCEndpointPolicy:
+    Type: Custom::VPCEndpointPolicy
+
+    Properties:
+      ServiceToken: !GetAtt VPCEndpointPolicyLambda.Arn
+      VpcEndpointId: !Ref VpcEndpointId
+
+Outputs:
+
+  LambdaArn:
+    Value: !GetAtt VPCEndpointPolicyLambda.Arn
+
+  RoleArn:
+    Value: !GetAtt LambdaExecutionRole.Arn
