@@ -197,3 +197,24 @@ Resources:
       VPCEndpointId: !Ref VPCEndpointId
 
       PolicyStatements: !Ref PolicyStatements
+
+
+  Outputs:
+
+  VPCEndpointPolicyMergeFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt VPCEndpointPolicyMergeFunction.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCEndpointPolicyMergeFunctionArn"
+
+  VPCEndpointPolicyMergeRoleArn:
+    Description: Lambda execution role ARN
+    Value: !GetAtt VPCEndpointPolicyLambdaRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCEndpointPolicyMergeRoleArn"
+
+  VPCEndpointId:
+    Description: VPC Endpoint ID
+    Value: !Ref VPCEndpointId
+    Export:
+      Name: !Sub "${AWS::StackName}-VPCEndpointId"
