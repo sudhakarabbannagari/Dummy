@@ -1,0 +1,199 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Merge statements into an existing VPC Endpoint Policy without replacing it.
+
+Parameters:
+
+  VPCEndpointId:
+    Type: String
+    Description: Existing VPC Endpoint ID
+
+  PolicyStatements:
+    Type: String
+    Description: |
+      JSON array of IAM statements to merge.
+      Example:
+      [
+        {
+          "Sid":"AllowS3",
+          "Effect":"Allow",
+          "Principal":"*",
+          "Action":["s3:GetObject"],
+          "Resource":"*"
+        }
+      ]
+
+Resources:
+
+############################################################
+# IAM Role
+############################################################
+
+  VPCEndpointPolicyLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub VPCEndpointPolicyMerge-${AWS::StackName}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+      Policies:
+
+        - PolicyName: VPCEndpointPolicyMerge
+
+          PolicyDocument:
+
+            Version: "2012-10-17"
+
+            Statement:
+
+              - Effect: Allow
+                Action:
+                  - ec2:DescribeVpcEndpoints
+                  - ec2:ModifyVpcEndpoint
+                Resource: "*"
+
+              - Effect: Allow
+                Action:
+                  - logs:*
+                Resource: "*"
+
+############################################################
+# Lambda
+############################################################
+
+  VPCEndpointPolicyMergeFunction:
+
+    Type: AWS::Lambda::Function
+
+    Properties:
+
+      Runtime: python3.12
+
+      Handler: index.handler
+
+      Timeout: 300
+
+      Role: !GetAtt VPCEndpointPolicyLambdaRole.Arn
+
+      Code:
+
+        ZipFile: |
+          import boto3
+          import json
+          import urllib.request
+
+          ec2 = boto3.client("ec2")
+
+          def send(event, context, status, data=None):
+              body = {
+                  "Status": status,
+                  "Reason": "See CloudWatch Logs",
+                  "PhysicalResourceId": event.get("PhysicalResourceId","VPCEndpointPolicyMerge"),
+                  "StackId": event["StackId"],
+                  "RequestId": event["RequestId"],
+                  "LogicalResourceId": event["LogicalResourceId"],
+                  "Data": data or {}
+              }
+
+              req = urllib.request.Request(
+                  event["ResponseURL"],
+                  data=json.dumps(body).encode(),
+                  headers={"content-type":""},
+                  method="PUT"
+              )
+
+              urllib.request.urlopen(req)
+
+          def normalize(statement):
+              return json.dumps(statement, sort_keys=True)
+
+          def handler(event, context):
+
+              props = event["ResourceProperties"]
+
+              endpoint = props["VPCEndpointId"]
+
+              new_statements = json.loads(props["PolicyStatements"])
+
+              try:
+
+                  response = ec2.describe_vpc_endpoints(
+                      VpcEndpointIds=[endpoint]
+                  )
+
+                  endpoint_info = response["VpcEndpoints"][0]
+
+                  policy = endpoint_info.get("PolicyDocument")
+
+                  if policy:
+                      policy = json.loads(policy)
+                  else:
+                      policy = {
+                          "Version":"2012-10-17",
+                          "Statement":[]
+                      }
+
+                  existing = policy.get("Statement", [])
+
+                  if event["RequestType"] == "Delete":
+
+                      remove = set(normalize(x) for x in new_statements)
+
+                      updated = [
+                          s for s in existing
+                          if normalize(s) not in remove
+                      ]
+
+                  else:
+
+                      merged = existing[:]
+
+                      existing_set = set(
+                          normalize(x)
+                          for x in existing
+                      )
+
+                      for stmt in new_statements:
+                          if normalize(stmt) not in existing_set:
+                              merged.append(stmt)
+
+                      updated = merged
+
+                  if updated != existing:
+
+                      policy["Statement"] = updated
+
+                      ec2.modify_vpc_endpoint(
+                          VpcEndpointId=endpoint,
+                          PolicyDocument=json.dumps(policy)
+                      )
+
+                  send(event, context, "SUCCESS")
+
+              except Exception as e:
+
+                  print(e)
+
+                  send(event, context, "FAILED", {"Error": str(e)})
+
+############################################################
+# Custom Resource
+############################################################
+
+  VPCEndpointPolicyMerge:
+
+    Type: Custom::VPCEndpointPolicyMerge
+
+    Properties:
+
+      ServiceToken: !GetAtt VPCEndpointPolicyMergeFunction.Arn
+
+      VPCEndpointId: !Ref VPCEndpointId
+
+      PolicyStatements: !Ref PolicyStatements
